@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Content Generator</title>
+    <!-- Load Tailwind CSS from CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Simple spinner animation */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-left-color: #fff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-xl bg-gray-800 rounded-2xl shadow-2xl p-8 md:p-12">
+        
+        <h1 class="text-3xl md:text-4xl font-bold text-center mb-4 text-white">
+            AI Content Generator
+        </h1>
+        <p class="text-center text-gray-400 mb-8">
+            Enter a topic and let AI build your presentation.
+        </p>
+
+        <!-- Presentation Form -->
+        <form id="ppt-form" class="space-y-6">
+            <div>
+                <label for="topic" class="block text-sm font-medium text-gray-300 mb-2">Topic</label>
+                <input type="text" id="topic" name="topic"
+                       class="w-full bg-gray-700 text-white border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                       placeholder="e.g., 'The Basics of Photosynthesis'" required>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="slide_count" class="block text-sm font-medium text-gray-300 mb-2">Number of Slides</label>
+                    <input type="number" id="slide_count" name="slide_count"
+                           class="w-full bg-gray-700 text-white border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                           value="5" min="2" max="15" required>
+                </div>
+                <div>
+                    <label for="audience" class="block text-sm font-medium text-gray-300 mb-2">Audience</label>
+                    <input type="text" id="audience" name="audience"
+                           class="w-full bg-gray-700 text-white border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                           value="University Students" required>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="generate-btn"
+                    class="w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 ease-in-out transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                <span id="btn-text">Generate Presentation</span>
+                <!-- Loading Indicator (hidden by default) -->
+                <div id="loading-indicator" class="hidden spinner ml-3"></div>
+            </button>
+        </form>
+
+        <!-- Error Message Area -->
+        <div id="error-message" 
+             class="hidden mt-6 p-4 bg-red-800 border border-red-600 text-red-100 rounded-lg">
+            <!-- Error content will be injected here -->
+        </div>
+
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        const pptForm = document.getElementById('ppt-form');
+        const generateBtn = document.getElementById('generate-btn');
+        const btnText = document.getElementById('btn-text');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const errorMessage = document.getElementById('error-message');
+
+        pptForm.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Stop form from reloading the page
+
+            // --- 1. Get form data ---
+            const formData = new FormData(pptForm);
+            const topic = formData.get('topic');
+            const payload = {
+                topic: topic,
+                slide_count: parseInt(formData.get('slide_count'), 10),
+                audience: formData.get('audience')
+            };
+            
+            // --- 2. Update UI to loading state ---
+            generateBtn.disabled = true;
+            btnText.textContent = 'Generating...';
+            loadingIndicator.classList.remove('hidden');
+            errorMessage.classList.add('hidden'); // Hide old errors
+            errorMessage.textContent = '';
+
+            try {
+                // --- 3. Make API call ---
+                const response = await fetch('/generate-ppt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                // --- 4. Handle API error ---
+                if (!response.ok) {
+                    // Try to get error message from backend
+                    const errorData = await response.json();
+                    const errorDetail = errorData.detail || 'An unknown error occurred.';
+                    throw new Error(`Error: ${response.status} - ${errorDetail}`);
+                }
+
+                // --- 5. Handle success (file download) ---
+                const blob = await response.blob();
+                
+                // Create a temporary URL for the blob
+                const url = window.URL.createObjectURL(blob);
+                
+                // Create a temporary link element to trigger the download
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                
+                // Create a clean filename
+                const filename = topic.replace(/[^a-z0-9_]/gi, '_').toLowerCase() + '.pptx';
+                a.download = filename;
+                
+                // Add the link to the body, click it, and remove it
+                document.body.appendChild(a);
+                a.click();
+                
+                // Clean up the temporary URL
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+            } catch (error) {
+                // --- 6. Show error message in UI ---
+                console.error('Generation failed:', error);
+                errorMessage.textContent = error.message;
+                errorMessage.classList.remove('hidden');
+            } finally {
+                // --- 7. Reset UI from loading state ---
+                generateBtn.disabled = false;
+                btnText.textContent = 'Generate Presentation';
+                loadingIndicator.classList.add('hidden');
+            }
+        });
+    </script>
+
+</body>
+</html>
